@@ -13,6 +13,8 @@ public class LongPollingTransport: HttpTransport {
     var reconnectDelay = 5.0
     var errorDelay = 2.0
     var pollingQueue = DispatchQueue(label: "com.autosoftdms.SignalR-Swift.serial")
+    /// The outstanding poll, cancelled on abort so it does not hold an HTTP connection for up to 240 s.
+    private var pollRequest: DataRequest?
 
     public override init() {
         super.init()
@@ -42,6 +44,9 @@ public class LongPollingTransport: HttpTransport {
 
     override public func abort(connection: ConnectionProtocol, timeout: Double, connectionData: String?) {
         super.abort(connection: connection, timeout: timeout, connectionData: connectionData)
+        self.completeAbort()
+        self.pollRequest?.cancel()
+        self.pollRequest = nil
     }
 
     override public func lostConnection(connection: ConnectionProtocol) {
@@ -78,7 +83,10 @@ public class LongPollingTransport: HttpTransport {
             }
         }
 
+        guard !self.tryCompleteAbort() else { return }
+
         let encodedRequest = connection.getRequest(url: url, httpMethod: .get, encoding: URLEncoding.default, parameters: parameters, timeout: 240)
+        self.pollRequest = encodedRequest
 
         _ = self.pollingQueue.sync {
             encodedRequest.validate().responseData(completionHandler: { [weak self, weak connection] response in

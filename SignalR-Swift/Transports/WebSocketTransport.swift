@@ -125,14 +125,18 @@ public class WebSocketTransport: HttpTransport, WebSocketDelegate {
             
             let baseUrl = try urlComponents?.asURL()
             let url = reconnecting ? baseUrl!.absoluteString.appending("reconnect") : baseUrl!.absoluteString.appending("connect")
-            let request = connection?.getRequest(url: url, httpMethod: .get, encoding: URLEncoding.default, parameters: parameters, timeout: 30)
-            
-            request?.onURLRequestCreation(perform: { [weak self] urlRequest in
-                guard let self = self else { return }
-                self.webSocket = WebSocket(request: urlRequest, certPinner: FoundationSecurity(allowSelfSigned: connection?.webSocketAllowsSelfSignedSSL ?? true))
-                self.webSocket!.delegate = self
-                self.webSocket!.connect()
-            })
+
+            // Build the handshake request directly. It used to come from the onURLRequestCreation
+            // closure of an Alamofire request that nothing started, so the socket was never opened and
+            // every connection fell back to another transport after transportConnectTimeout.
+            guard let urlRequest = connection?.getURLRequest(url: url, httpMethod: .get, encoding: URLEncoding.default, parameters: parameters, timeout: 30, headers: [:]) else {
+                throw URLError(.badURL)
+            }
+
+            let webSocket = WebSocket(request: urlRequest, certPinner: FoundationSecurity(allowSelfSigned: connection?.webSocketAllowsSelfSignedSSL ?? true))
+            webSocket.delegate = self
+            self.webSocket = webSocket
+            webSocket.connect()
         } catch {
             print("error: \(error)")
         }

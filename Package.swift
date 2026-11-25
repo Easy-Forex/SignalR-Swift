@@ -23,7 +23,11 @@ let package = Package(
             name: "SignalRSwift",
             dependencies: ["Alamofire", "Starscream"],
             path: "SignalR-Swift",
-            exclude: ["Info.plist"])
+            exclude: ["Info.plist"]),
+        .testTarget(
+            name: "SignalRSwiftPackageTests",
+            dependencies: ["SignalRSwift"],
+            path: "Tests/SignalRSwiftPackageTests")
     ],
     swiftLanguageVersions: [.v5]
 )

@@ -295,7 +295,8 @@ public class Connection: ConnectionProtocol {
         self.keepAliveData?.lastKeepAlive = Date()
     }
     
-    private func encodedURLRequest(url: URLConvertible, httpMethod: HTTPMethod, encoding: ParameterEncoding, parameters: Parameters?, timeout: Double, headers: HTTPHeaders) -> URLRequest? {
+    /// Builds the request with the connection's headers and User-Agent, without sending it.
+    public func getURLRequest(url: URLConvertible, httpMethod: HTTPMethod, encoding: ParameterEncoding, parameters: Parameters?, timeout: Double, headers: HTTPHeaders) -> URLRequest? {
         var globalHeaders = self.headers
         globalHeaders["User-Agent"] = self.createUserAgentString(client: "SignalR.Client.iOS")
         
@@ -303,25 +304,24 @@ public class Connection: ConnectionProtocol {
             globalHeaders[httpHeader] = value
         }
         
-        var urlRequest = try? URLRequest(url: url.asURL(), method: httpMethod, headers: globalHeaders)
-        urlRequest?.timeoutInterval = timeout
+        guard var urlRequest = try? URLRequest(url: url.asURL(), method: httpMethod, headers: globalHeaders) else { return nil }
+        urlRequest.timeoutInterval = timeout
         
-        let encodedURLRequest = try? encoding.encode(urlRequest!, with: parameters)
-        return encodedURLRequest
+        return try? encoding.encode(urlRequest, with: parameters)
     }
 
     public func getRequest(url: URLConvertible, httpMethod: HTTPMethod, encoding: ParameterEncoding, parameters: Parameters?) -> DataRequest {
-        let request = encodedURLRequest(url: url, httpMethod: httpMethod, encoding: encoding, parameters: parameters, timeout: 30.0, headers: [:])
+        let request = getURLRequest(url: url, httpMethod: httpMethod, encoding: encoding, parameters: parameters, timeout: 30.0, headers: [:])
         return sessionManager.request(request!)
     }
 
     public func getRequest(url: URLConvertible, httpMethod: HTTPMethod, encoding: ParameterEncoding, parameters: Parameters?, timeout: Double) -> DataRequest {
-        let request = encodedURLRequest(url: url, httpMethod: httpMethod, encoding: encoding, parameters: parameters, timeout: timeout, headers: [:])
+        let request = getURLRequest(url: url, httpMethod: httpMethod, encoding: encoding, parameters: parameters, timeout: timeout, headers: [:])
         return sessionManager.request(request!)
     }
     
     public func getRequest(url: URLConvertible, httpMethod: HTTPMethod, encoding: ParameterEncoding, parameters: Parameters?, timeout: Double, headers: HTTPHeaders) -> DataStreamRequest {
-        let request = encodedURLRequest(url: url, httpMethod: httpMethod, encoding: encoding, parameters: parameters, timeout: timeout, headers: headers)
+        let request = getURLRequest(url: url, httpMethod: httpMethod, encoding: encoding, parameters: parameters, timeout: timeout, headers: headers)
         return sessionManager.streamRequest(request!)
     }
 

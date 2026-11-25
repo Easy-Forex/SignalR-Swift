@@ -15,6 +15,9 @@ public class ServerSentEventsTransport: HttpTransport {
     private var stop = false
     private var connectTimeoutOperation: BlockOperation?
     private var completionHandler: CompletionHandler?
+    /// The open event stream. The server does not end it when the client stops, so abort cancels it;
+    /// otherwise every stopped connection kept one HTTP connection to the host busy for good.
+    private var eventStreamRequest: DataStreamRequest?
     private let sseQueue = DispatchQueue(label: "com.autosoftdms.SignalR-Swift.serverSentEvents", qos: .userInitiated)
     
     var reconnectDelay: TimeInterval = 2.0
@@ -62,6 +65,16 @@ public class ServerSentEventsTransport: HttpTransport {
     
     override public func abort(connection: ConnectionProtocol, timeout: Double, connectionData: String?) {
         self.stop = true
+
+        if let timeoutOperation = self.connectTimeoutOperation {
+            NSObject.cancelPreviousPerformRequests(withTarget: timeoutOperation, selector: #selector(BlockOperation.start), object: nil)
+        }
+        self.connectTimeoutOperation = nil
+        self.completionHandler = nil
+
+        self.eventStreamRequest?.cancel()
+        self.eventStreamRequest = nil
+
         super.abort(connection: connection, timeout: timeout, connectionData: connectionData)
     }
     
@@ -83,7 +96,8 @@ public class ServerSentEventsTransport: HttpTransport {
         
         let url = isReconnecting ? connection.url.appending("reconnect") : connection.url.appending("connect")
         
-        connection.getRequest(url: url,
+        self.eventStreamRequest?.cancel()
+        self.eventStreamRequest = connection.getRequest(url: url,
                               httpMethod: .get,
                               encoding: URLEncoding.default,
                               parameters: parameters,
@@ -110,6 +124,12 @@ public class ServerSentEventsTransport: HttpTransport {
                 case let .complete(completion):
                     
                     guard let strongSelf = self, let strongConnection = connection else { return }
+                    
+                    // Stopped by the client: nothing to report and no reconnect.
+                    if strongSelf.stop {
+                        strongSelf.completeAbort()
+                        return
+                    }
                     
                     strongSelf.cancelTimeoutOperation()
                     
